@@ -55,36 +55,34 @@ from langchain.chat_models import init_chat_model
 llm = init_chat_model("gpt-4o-mini", model_provider="openai")
 
 
-def compute_treatment_effect(df: pd.DataFrame, metric_col='metric', experiment_group_col='experiment_group'):
-    # Define the formula for the linear regression
-    formula = f"{metric_col} ~ C({experiment_group_col})"
-    # Fit the model
-    model = ols(formula, data=df).fit()
-
-    # Extract the treatment effect and p-value
-    treatment_effect = model.params[1]  # Coefficient for the treatment group
-    p_value = model.pvalues[1]  # P-value for the treatment group
-    return treatment_effect, p_value
-
+# Define tools
 @tool
 def compute_treatment_effect(x: str):
     """
-    Given a string representing a dataframe with two columns (first elemnt of each tuple is index) such as 
-    '[(1, 0.2054792820232115, 0), (2, 0.2723859937913791, 0), (3, 0.2624978915182918, 0)]' , 
-    compute the treatment effect of data. The treatment effect means the difference-in-means
-    of metric value (second elemnt of each tuple) with repctive for treatment assignment (third elemnt of each tuple)
+    Given a string representing a dataframe with two columns (first element of each tuple is index) such as 
+    '[(1, 0.2054792820232115, 0), (2, 0.2723859937913791, 0), (3, 0.2624978915182918, 0)]', 
+    compute the treatment effect of the data. The treatment effect is defined as the difference-in-means
+    of the metric value (second element of each tuple) with respect to the treatment assignment 
+    (third element of each tuple). 
+
+    Returns:
+        dict: A dictionary containing both the treatment effect and p-value.
     """
     # Convert the string x into a list of tuples
     data = eval(x)
     # Create a DataFrame from the list of tuples
-    df = pd.DataFrame(data)
-    # Calculate the difference in means between the treatment and control groups
-    control_mean = df[df[2] == 0][1].mean()
-    treatment_mean = df[df[2] == 1][1].mean()
-    diff_in_means = treatment_mean - control_mean
-    return float(diff_in_means)
+    df = pd.DataFrame(data, columns=['index', 'metric', 'experiment_group'])
+    
+    # Calculate p-value using the formula from the non-tool version
+    formula = "metric ~ experiment_group"  # Using 'metric' as the dependent variable and 'experiment_group' as the independent variable
+    model = ols(formula, data=df).fit()
+    p_value = model.pvalues['experiment_group']
+    
+    return {
+        "treatment_effect": float(model.params['experiment_group']),
+        "p_value": float(p_value)
+    }
 
-# Define tools
 @tool
 def generate_and_execute_sql(question):
     """
@@ -136,23 +134,6 @@ def generate_and_execute_sql(question):
     execute_query_tool = QuerySQLDatabaseTool(db=db)
     return execute_query_tool.invoke(query)
 
-@tool
-def compute_treatment_effect(x: str):
-    """
-    Given a string representing a dataframe with two columns (first elemnt of each tuple is index) such as 
-    '[(1, 0.2054792820232115, 0), (2, 0.2723859937913791, 0), (3, 0.2624978915182918, 0)]' , 
-    compute the treatment effect of data. The treatment effect means the difference-in-means
-    of metric value (second elemnt of each tuple) with repctive for treatment assignment (third elemnt of each tuple)
-    """
-    # Convert the string x into a list of tuples
-    data = eval(x)
-    # Create a DataFrame from the list of tuples
-    df = pd.DataFrame(data)
-    # Calculate the difference in means between the treatment and control groups
-    control_mean = df[df[2] == 0][1].mean()
-    treatment_mean = df[df[2] == 1][1].mean()
-    diff_in_means = treatment_mean - control_mean
-    return float(diff_in_means)
 
 # Augment the LLM with tools
 tools = [generate_and_execute_sql, compute_treatment_effect]
