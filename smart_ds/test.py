@@ -66,7 +66,23 @@ def compute_treatment_effect(df: pd.DataFrame, metric_col='metric', experiment_g
     p_value = model.pvalues[1]  # P-value for the treatment group
     return treatment_effect, p_value
 
-
+@tool
+def compute_treatment_effect(x: str):
+    """
+    Given a string representing a dataframe with two columns (first elemnt of each tuple is index) such as 
+    '[(1, 0.2054792820232115, 0), (2, 0.2723859937913791, 0), (3, 0.2624978915182918, 0)]' , 
+    compute the treatment effect of data. The treatment effect means the difference-in-means
+    of metric value (second elemnt of each tuple) with repctive for treatment assignment (third elemnt of each tuple)
+    """
+    # Convert the string x into a list of tuples
+    data = eval(x)
+    # Create a DataFrame from the list of tuples
+    df = pd.DataFrame(data)
+    # Calculate the difference in means between the treatment and control groups
+    control_mean = df[df[2] == 0][1].mean()
+    treatment_mean = df[df[2] == 1][1].mean()
+    diff_in_means = treatment_mean - control_mean
+    return float(diff_in_means)
 
 # Define tools
 @tool
@@ -121,22 +137,25 @@ def generate_and_execute_sql(question):
     return execute_query_tool.invoke(query)
 
 @tool
-def compute_treatment_effect(df: pd.DataFrame, metric_col='metric', experiment_group_col='experiment_group'):
+def compute_treatment_effect(x: str):
     """
-    Given an input human question in English, create a syntactically correct sqlite query to
-    run to help find the answer
+    Given a string representing a dataframe with two columns (first elemnt of each tuple is index) such as 
+    '[(1, 0.2054792820232115, 0), (2, 0.2723859937913791, 0), (3, 0.2624978915182918, 0)]' , 
+    compute the treatment effect of data. The treatment effect means the difference-in-means
+    of metric value (second elemnt of each tuple) with repctive for treatment assignment (third elemnt of each tuple)
     """
-    # Define the formula for the linear regression
-    formula = f"{metric_col} ~ C({experiment_group_col})"
-    # Fit the model
-    model = ols(formula, data=df).fit()
-    # Extract the treatment effect and p-value
-    treatment_effect = model.params[1]  # Coefficient for the treatment group
-    p_value = model.pvalues[1]  # P-value for the treatment group
-    return float(treatment_effect), float(p_value)
+    # Convert the string x into a list of tuples
+    data = eval(x)
+    # Create a DataFrame from the list of tuples
+    df = pd.DataFrame(data)
+    # Calculate the difference in means between the treatment and control groups
+    control_mean = df[df[2] == 0][1].mean()
+    treatment_mean = df[df[2] == 1][1].mean()
+    diff_in_means = treatment_mean - control_mean
+    return float(diff_in_means)
 
 # Augment the LLM with tools
-tools = [generate_and_execute_sql]
+tools = [generate_and_execute_sql, compute_treatment_effect]
 tools_by_name = {tool.name: tool for tool in tools}
 llm_with_tools = llm.bind_tools(tools)
 
@@ -159,18 +178,25 @@ def tool_node(state: State):
 
 def llm_call(state: State):
     """LLM decides whether to call a tool or not"""
-
+    system_messgage_conent = """
+    You are a helpful data scientist tasked with analyzing experiment data
+    Tool Usage Instructions:
+    - Use the 'generate_and_execute_sql' tool when you need to query the database and get some data for analysis
+    - Use the 'compute_treatment_effect' tool when you need to compute the treatment effect of data, this tool is usually called
+    after obtaining some data from calling 'generate_and_execute_sql' tool
+    """
     return {
         "messages": 
             llm_with_tools.invoke(
                 [
                     SystemMessage(
-                        content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+                        content=system_messgage_conent
                     )
                 ]
                 + state["messages"]
             )        
     }
+
 
 # Conditional edge function to route to the tool node or end based upon whether the LLM made a tool call
 def should_continue(state: MessagesState) -> Literal["environment", END]:
@@ -186,12 +212,12 @@ def should_continue(state: MessagesState) -> Literal["environment", END]:
 
 # Build workflow
 agent_builder = StateGraph(State)
-
+# Add nodes
 agent_builder.add_node("llm_call", llm_call)
 agent_builder.add_edge(START, "llm_call")
 
 agent_builder.add_node("environment", tool_node)
-agent_builder.add_edge("llm_call", "environment")
+agent_builder.add_edge("environment", "llm_call")
 
 agent_builder.add_conditional_edges(
     "llm_call",
@@ -210,8 +236,9 @@ def stream_graph_updates(user_input: str):
         for value in event.values():
             print("Assistant:", value)
 
-user_message = "what is the average treatment effect for users in the experiment"
 
+
+user_message = "what is the treatment effect of experiment"
 # stream_graph_updates(user_message)
 
 # Invoke
