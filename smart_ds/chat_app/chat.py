@@ -221,7 +221,7 @@ def stream_graph_updates(user_input: str):
             print("Assistant:", value)
 
 
-
+'''
 user_message = "In which country do we have the highest treatment effect with statistical significance"
 # stream_graph_updates(user_message)
 
@@ -230,3 +230,4 @@ messages = [HumanMessage(content=user_message)]
 messages = agent.invoke({"messages": messages}, {"configurable": {"thread_id": "1"}})
 for m in messages["messages"]:
     m.pretty_print()
+'''
