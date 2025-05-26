@@ -89,7 +89,7 @@ def compute_treatment_effect(x: str):
 def generate_and_execute_sql(question):
     """
     Given an input human question in English, create a syntactically correct sqlite query to
-    run to help find the answer
+    run to help find the answer 
     """
 
     # Annotations must have the type and can optionally include a default value and description (in that order).
